@@ -9,20 +9,40 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"flag"
 	"log"
 	"os"
+	"io"
 )
 
 func main() {
-	buff, err := ioutil.ReadFile("2DDA3F0_1.zlib")
+	input := flag.String("i", "", "Input file")
+	output := flag.String("o", "output.png", "Output file")
+	isdata := flag.Bool("z", false, "Input file is just a data file instead of zlib")
+	help := flag.Bool("h", false, "Help flag")
+	flag.Parse()
+	if *help {
+		flag.Usage()
+		return
+	}
+	if *input == "" {
+		fmt.Println("No input file specified (-i=<filename>)")
+		return
+	}
+	buff, err := ioutil.ReadFile(*input)
 	if err != nil{
 		fmt.Println(err)
 		return
 	}
-	b, err := zlib.NewReader(bytes.NewReader(buff))
-	if err != nil{
+	var b io.Reader
+	if *isdata{
+		b = bytes.NewReader(buff)
+	}else{
+		b, err = zlib.NewReader(bytes.NewReader(buff))
+		if err != nil{
 		fmt.Println(err)
 		return
+		}
 	}
 	enflated, err := ioutil.ReadAll(b)
 	if err != nil {
@@ -58,16 +78,24 @@ func main() {
 	}else if encoding == 6 {
 		fmt.Println("Its RGB")
 		increment = 3
+	}else{
+		fmt.Println("UNKNOWN ENCODING", encoding, "ABORTING")
+		return
 	}
 	var pixel_range []byte
+	if len(header) == 0 || header[0] != 0 {
+		fmt.Println("NOT A PIMG FILE: ABORTING")
+		return
+	}
+	if len(idat) == 0 {
+		fmt.Println("CANNOT FIND IDAT SECTION, DOUBLE CHECK FILE: ABORTING")
+		return
+	}
 	if len(iend) == 0 {
 		pixel_range = enflated[idat[1]:]
-		fmt.Println("There is no IEND, Image is possibly incomplete")
+		fmt.Println("There is no IEND, Image is possibly incomplete: CONTINUING")
 	}else{
 		pixel_range = enflated[idat[1]:iend[0]]
-	}
-	if len(header) == 0 || header[0] != 0 {
-		fmt.Println("NOT A PIMG FILE, ABORTING")
 	}
 	img := image.NewNRGBA(image.Rect(0, 0, width, height))
 	for i := idat[1]; i+increment < len(pixel_range); i=i+increment{
@@ -87,8 +115,8 @@ func main() {
 		})
 	}
 
-	fmt.Println("PARSING COMPLETE, Writing image.png")
-	f, err := os.Create("image.png")
+	fmt.Println("PARSING COMPLETE, Writing ", *output)
+	f, err := os.Create(*output)
 	if err != nil {
 		log.Fatal(err)
 	}
